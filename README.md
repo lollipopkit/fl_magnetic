@@ -4,6 +4,8 @@ English | [中文](README_zh.md)
 
 A Flutter UI component inspired by the iOS SpriteKit library **Magnetic**: a floating “bubble picker” with physics, selection, and customization.
 
+[Demo video](https://cdn.lpkt.cn/misc/video/fl_magnetic.webm)
+
 ## Features
 
 - Bubbles float, collide, bounce, and gently attract to center.

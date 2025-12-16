@@ -4,6 +4,8 @@
 
 仿照 iOS SpriteKit 库 **Magnetic** 的“漂浮气泡选择器”效果实现的 Flutter UI 组件。
 
+[演示视频](https://cdn.lpkt.cn/misc/video/fl_magnetic.webm)
+
 ## 特性
 
 - 气泡自动漂浮、碰撞、回弹并向中心轻微吸附。
