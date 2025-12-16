@@ -15,6 +15,36 @@ typedef MagneticNodeBuilder = Widget Function(
   bool selected,
 );
 
+@immutable
+class MagneticViewTuning {
+  final double maxDtSeconds;
+  final double initialVelocityScale;
+  final double itemDragReleaseVelocityScale;
+  final double backgroundDragReleaseVelocityScale;
+  final double pathHullSamplesPerLength;
+  final int pathHullMinSamples;
+  final int pathHullMaxSamples;
+  final int adaptiveLabelSearchIterations;
+
+  const MagneticViewTuning({
+    this.maxDtSeconds = 0.05,
+    this.initialVelocityScale = 80.0,
+    this.itemDragReleaseVelocityScale = 1.0,
+    this.backgroundDragReleaseVelocityScale = 0.7,
+    this.pathHullSamplesPerLength = 20.0,
+    this.pathHullMinSamples = 24,
+    this.pathHullMaxSamples = 160,
+    this.adaptiveLabelSearchIterations = 14,
+  })  : assert(maxDtSeconds >= 0),
+        assert(initialVelocityScale >= 0),
+        assert(itemDragReleaseVelocityScale >= 0),
+        assert(backgroundDragReleaseVelocityScale >= 0),
+        assert(pathHullSamplesPerLength > 0),
+        assert(pathHullMinSamples >= 3),
+        assert(pathHullMaxSamples >= pathHullMinSamples),
+        assert(adaptiveLabelSearchIterations > 0);
+}
+
 class _AdaptiveLabel extends StatelessWidget {
   final String text;
   final Color color;
@@ -22,6 +52,7 @@ class _AdaptiveLabel extends StatelessWidget {
   final double minFontSize;
   final int maxLines;
   final FontWeight fontWeight;
+  final int searchIterations;
 
   const _AdaptiveLabel({
     required this.text,
@@ -30,6 +61,7 @@ class _AdaptiveLabel extends StatelessWidget {
     required this.minFontSize,
     required this.maxLines,
     required this.fontWeight,
+    required this.searchIterations,
   });
 
   double _bestFontSize(BoxConstraints constraints, TextDirection direction) {
@@ -58,7 +90,8 @@ class _AdaptiveLabel extends StatelessWidget {
     var low = minFontSize.clamp(0.0, maxFontSize);
     var high = maxFontSize;
     var best = low;
-    for (var i = 0; i < 14; i++) {
+    final iters = max(1, searchIterations);
+    for (var i = 0; i < iters; i++) {
       final mid = (low + high) / 2;
       if (fits(mid)) {
         best = mid;
@@ -141,6 +174,7 @@ class MagneticView extends StatefulWidget {
   final bool enableBackgroundDrag;
   final bool enableLongPressToRemove;
   final Duration removeAnimationDuration;
+  final MagneticViewTuning tuning;
   final MagneticPhysics? physics;
   final MagneticNodeBuilder? nodeBuilder;
   /// Optional hook to provide custom animations for select/deselect/remove.
@@ -164,6 +198,7 @@ class MagneticView extends StatefulWidget {
     this.enableBackgroundDrag = true,
     this.enableLongPressToRemove = false,
     this.removeAnimationDuration = const Duration(milliseconds: 200),
+    this.tuning = const MagneticViewTuning(),
     this.physics,
     this.nodeBuilder,
     this.animationBuilder,
@@ -180,7 +215,7 @@ class MagneticView extends StatefulWidget {
 class _MagneticViewState extends State<MagneticView>
     with TickerProviderStateMixin {
   late MagneticController _controller;
-  late final MagneticPhysics _physics;
+  late MagneticPhysics _physics;
   bool _ownsController = false;
   late final Ticker _ticker;
   final Random _rng = Random();
@@ -250,6 +285,10 @@ class _MagneticViewState extends State<MagneticView>
       } else {
         _lastSelectedIds = _controller.selectedIds;
       }
+    }
+
+    if (oldWidget.physics != widget.physics) {
+      _physics = widget.physics ?? MagneticPhysics();
     }
   }
 
@@ -340,8 +379,8 @@ class _MagneticViewState extends State<MagneticView>
           r + _rng.nextDouble() * max(1.0, _size.height - r * 2),
         );
         final vel = Offset(
-          (_rng.nextDouble() - 0.5) * 80,
-          (_rng.nextDouble() - 0.5) * 80,
+          (_rng.nextDouble() - 0.5) * widget.tuning.initialVelocityScale,
+          (_rng.nextDouble() - 0.5) * widget.tuning.initialVelocityScale,
         );
         return MagneticParticle(position: pos, velocity: vel);
       });
@@ -362,7 +401,8 @@ class _MagneticViewState extends State<MagneticView>
 
   void _onTick(Duration elapsed) {
     final dtSeconds = ((elapsed - _lastTick).inMicroseconds / 1e6)
-        .clamp(0.0, 0.05);
+        .clamp(0.0, widget.tuning.maxDtSeconds)
+        .toDouble();
     _lastTick = elapsed;
     final lockedIds = <String>{};
     if (_draggingBackground) {
@@ -370,17 +410,30 @@ class _MagneticViewState extends State<MagneticView>
     } else if (_draggingNodeId != null) {
       lockedIds.add(_draggingNodeId!);
     }
+
+    final nodes = _controller.nodes;
+    final nodeById = <String, MagneticNode>{
+      for (final node in nodes) node.id: node,
+    };
+    final radiusById = <String, double>{
+      for (final node in nodes) node.id: _collisionRadiusFor(node),
+    };
+
     _physics.step(
       particles: _particles,
       size: _size,
       dt: dtSeconds,
       radiusFor: (id) {
-        final node = _controller.nodes.firstWhere((n) => n.id == id);
-        return _collisionRadiusFor(node);
+        final cached = radiusById[id];
+        if (cached != null) return cached;
+        final node = nodeById[id];
+        if (node == null) return 0;
+        final r = _collisionRadiusFor(node);
+        radiusById[id] = r;
+        return r;
       },
       hullFor: (id) {
-        final node =
-            _controller.nodes.cast<MagneticNode?>().firstWhere((n) => n?.id == id, orElse: () => null);
+        final node = nodeById[id];
         if (node == null) return null;
         final selected = _controller.isSelected(id);
         final style = _styleFor(node);
@@ -389,7 +442,7 @@ class _MagneticViewState extends State<MagneticView>
         if (unitHull == null) return null;
         final p = _particles[id];
         if (p == null) return null;
-        final diameter = _collisionRadiusFor(node) * 2;
+        final diameter = (radiusById[id] ?? _collisionRadiusFor(node)) * 2;
         return unitHull
             .map((u) => p.position + u * diameter)
             .toList(growable: false);
@@ -403,7 +456,10 @@ class _MagneticViewState extends State<MagneticView>
     final fitted = _fitPathToSize(originalPath, const Size(1, 1));
     final points = <Offset>[];
     for (final metric in fitted.computeMetrics(forceClosed: true)) {
-      final count = (metric.length * 20).round().clamp(24, 160);
+      final count = (metric.length * widget.tuning.pathHullSamplesPerLength)
+          .round()
+          .clamp(widget.tuning.pathHullMinSamples, widget.tuning.pathHullMaxSamples)
+          .toInt();
       for (var i = 0; i < count; i++) {
         final t = metric.length * (i / count);
         final pos = metric.getTangentForOffset(t)?.position;
@@ -647,7 +703,8 @@ class _MagneticViewState extends State<MagneticView>
     if (id == null) return;
     final p = _particles[id];
     if (p != null) {
-      var v = details.velocity.pixelsPerSecond;
+      var v = details.velocity.pixelsPerSecond *
+          widget.tuning.itemDragReleaseVelocityScale;
       final speed = v.distance;
       if (speed > _physics.maxVelocity) {
         v = v / speed * _physics.maxVelocity;
@@ -658,7 +715,8 @@ class _MagneticViewState extends State<MagneticView>
   }
 
   void _endBackgroundDrag(DragEndDetails details) {
-    final vRaw = details.velocity.pixelsPerSecond * 0.7;
+    final vRaw = details.velocity.pixelsPerSecond *
+        widget.tuning.backgroundDragReleaseVelocityScale;
     var v = vRaw;
     final speed = v.distance;
     if (speed > _physics.maxVelocity) {
@@ -790,12 +848,16 @@ class _MagneticViewState extends State<MagneticView>
                     selected: selected,
                     style: style,
                     anySelected: anySelected,
+                    labelSearchIterations:
+                        widget.tuning.adaptiveLabelSearchIterations,
                   )
                 : _DefaultBubble(
                     node: node,
                     selected: selected,
                     style: style,
                     anySelected: anySelected,
+                    labelSearchIterations:
+                        widget.tuning.adaptiveLabelSearchIterations,
                   )));
 
     Widget animatedChild = baseChild;
@@ -858,12 +920,14 @@ class _DefaultBubble extends StatelessWidget {
   final bool selected;
   final MagneticNodeStyle style;
   final bool anySelected;
+  final int labelSearchIterations;
 
   const _DefaultBubble({
     required this.node,
     required this.selected,
     required this.style,
     required this.anySelected,
+    required this.labelSearchIterations,
   });
 
   @override
@@ -904,6 +968,7 @@ class _DefaultBubble extends StatelessWidget {
                       minFontSize: style.minFontSize,
                       maxLines: style.textMaxLines,
                       fontWeight: FontWeight.w600,
+                      searchIterations: labelSearchIterations,
                     ),
                   );
                 }
@@ -931,6 +996,7 @@ class _DefaultBubble extends StatelessWidget {
                           minFontSize: style.minFontSize,
                           maxLines: style.textMaxLines,
                           fontWeight: FontWeight.w600,
+                          searchIterations: labelSearchIterations,
                         ),
                       ),
                     ),
@@ -1001,12 +1067,14 @@ class _PathBubble extends StatelessWidget {
   final bool selected;
   final MagneticNodeStyle style;
   final bool anySelected;
+  final int labelSearchIterations;
 
   const _PathBubble({
     required this.node,
     required this.selected,
     required this.style,
     required this.anySelected,
+    required this.labelSearchIterations,
   });
 
   @override
@@ -1052,6 +1120,7 @@ class _PathBubble extends StatelessWidget {
                       minFontSize: style.minFontSize,
                       maxLines: style.textMaxLines,
                       fontWeight: FontWeight.w600,
+                      searchIterations: labelSearchIterations,
                     ),
                   ),
                 ),

@@ -17,17 +17,15 @@ A Flutter UI component inspired by the iOS SpriteKit library **Magnetic**: a flo
 
 ## Getting started
 
-```yaml
-dependencies:
-  magnetic:
-    path: ../magnetic.dart
+```sh
+dart pub add fl_magnetic
 ```
 
 ## Usage
 
 ```dart
 import 'package:flutter/material.dart';
-import 'package:magnetic/magnetic.dart';
+import 'package:fl_magnetic/fl_magnetic.dart';
 
 class Demo extends StatefulWidget {
   const Demo({super.key});
@@ -75,6 +73,8 @@ class _DemoState extends State<Demo> {
 ## API overview
 
 - `MagneticView`: the scene widget (physics + gestures).
+- `MagneticView.physics`: provide a custom `MagneticPhysics` instance.
+- `MagneticView.tuning`: tune frame step / hull sampling / label fitting.
 - `MagneticController`: manages nodes and selection (supports dynamic add/remove and `resetSelection`).
 - `MagneticController.selectedNodes`: selected nodes in `nodes` order.
 - `MagneticNode`: node model (text/image/style/etc).
@@ -86,6 +86,39 @@ class _DemoState extends State<Demo> {
   - `textMaxLines` / `minFontSize`: default label multiline + adaptive font size.
 - `MagneticView.spacingScale`: global spacing multiplier (multiplies with `marginScale`).
 - `MagneticView.animationBuilder`: select/deselect/remove animation hook.
+- `MagneticPhysics`: physics parameters + broad-phase options.
+- `MagneticViewTuning`: view/algorithm tuning parameters.
+
+### Physics and tuning
+
+All algorithm/performance knobs are configurable via `MagneticPhysics` and `MagneticViewTuning`.
+
+```dart
+MagneticView(
+  controller: controller,
+  physics: MagneticPhysics(
+    enableSpatialHash: true,
+    spatialHashThreshold: 32,
+    spatialHashCellSizeMultiplier: 2.0,
+    spatialHashMinCellSize: 1.0,
+    satCircleHullSides: 12,
+    samePositionEpsilon: 0.001,
+    centerAttractionEpsilon: 0.001,
+    collisionImpulse: 0.9,
+    copyProvidedHulls: true,
+  ),
+  tuning: const MagneticViewTuning(
+    maxDtSeconds: 0.05,
+    initialVelocityScale: 80,
+    itemDragReleaseVelocityScale: 1.0,
+    backgroundDragReleaseVelocityScale: 0.7,
+    pathHullSamplesPerLength: 20,
+    pathHullMinSamples: 24,
+    pathHullMaxSamples: 160,
+    adaptiveLabelSearchIterations: 14,
+  ),
+)
+```
 
 ### Custom shape example
 

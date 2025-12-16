@@ -2,14 +2,13 @@ import 'dart:math';
 
 import 'package:flutter/widgets.dart';
 
+import 'cell_key.dart';
+
 class MagneticParticle {
   Offset position;
   Offset velocity;
 
-  MagneticParticle({
-    required this.position,
-    required this.velocity,
-  });
+  MagneticParticle({required this.position, required this.velocity});
 }
 
 class MagneticPhysics {
@@ -19,6 +18,15 @@ class MagneticPhysics {
   final double drag;
   final double maxVelocity;
   final double bounce;
+  final bool enableSpatialHash;
+  final int spatialHashThreshold;
+  final double spatialHashCellSizeMultiplier;
+  final double spatialHashMinCellSize;
+  final int satCircleHullSides;
+  final double samePositionEpsilon;
+  final double centerAttractionEpsilon;
+  final double collisionImpulse;
+  final bool copyProvidedHulls;
 
   MagneticPhysics({
     Random? rng,
@@ -27,7 +35,23 @@ class MagneticPhysics {
     this.drag = 0.15,
     this.maxVelocity = 220.0,
     this.bounce = 0.8,
-  }) : _rng = rng ?? Random();
+    this.enableSpatialHash = true,
+    this.spatialHashThreshold = 32,
+    this.spatialHashCellSizeMultiplier = 2.0,
+    this.spatialHashMinCellSize = 1.0,
+    this.satCircleHullSides = 12,
+    this.samePositionEpsilon = 0.001,
+    this.centerAttractionEpsilon = 0.001,
+    this.collisionImpulse = 0.9,
+    this.copyProvidedHulls = true,
+  }) : assert(spatialHashThreshold >= 0),
+       assert(spatialHashCellSizeMultiplier > 0),
+       assert(spatialHashMinCellSize > 0),
+       assert(satCircleHullSides >= 3),
+       assert(samePositionEpsilon >= 0),
+       assert(centerAttractionEpsilon >= 0),
+       assert(collisionImpulse >= 0),
+       _rng = rng ?? Random();
 
   void step({
     required Map<String, MagneticParticle> particles,
@@ -42,19 +66,34 @@ class MagneticPhysics {
     final center = Offset(size.width / 2, size.height / 2);
     final shortestSide = size.shortestSide;
 
+    final ids = <String>[];
+    final particleList = <MagneticParticle>[];
+    final radii = <double>[];
+    final locked = <bool>[];
+    var maxRadius = 0.0;
+
     for (final entry in particles.entries) {
       final id = entry.key;
       final p = entry.value;
-      final r = radiusFor(entry.key);
 
-      if (lockedIds.contains(id)) {
+      ids.add(id);
+      particleList.add(p);
+
+      final r = radiusFor(id);
+      radii.add(r);
+      if (r > maxRadius) maxRadius = r;
+
+      final isLocked = lockedIds.contains(id);
+      locked.add(isLocked);
+
+      if (isLocked) {
         p.velocity = Offset.zero;
         continue;
       }
 
       final toCenter = center - p.position;
       final dist = toCenter.distance;
-      if (dist > 0.001) {
+      if (dist > centerAttractionEpsilon) {
         final dir = toCenter / dist;
         final force = dir * (attractionStrength / max(1.0, shortestSide));
         p.velocity += force * dt * shortestSide;
@@ -93,102 +132,202 @@ class MagneticPhysics {
       }
     }
 
-    final ids = particles.keys.toList(growable: false);
-    for (var i = 0; i < ids.length; i++) {
-      for (var j = i + 1; j < ids.length; j++) {
-        final idA = ids[i];
-        final idB = ids[j];
-        final a = particles[idA]!;
-        final b = particles[idB]!;
-        final rA = radiusFor(idA);
-        final rB = radiusFor(idB);
-        final minDist = rA + rB;
+    final count = ids.length;
+    if (count < 2) return;
 
-        final lockedA = lockedIds.contains(idA);
-        final lockedB = lockedIds.contains(idB);
+    final samePos2 = samePositionEpsilon * samePositionEpsilon;
 
-        final hullA = hullFor?.call(idA);
-        final hullB = hullFor?.call(idB);
-
-        if (hullA == null && hullB == null) {
-          var delta = b.position - a.position;
-          var dist = delta.distance;
-          if (dist < 0.001) {
-            delta =
-                Offset(_rng.nextDouble() - 0.5, _rng.nextDouble() - 0.5);
-            dist = delta.distance;
-          }
-          if (dist < minDist) {
-            final dir = delta / dist;
-            final overlap = minDist - dist;
-
-            if (lockedA && lockedB) {
-              continue;
-            } else if (lockedA) {
-              b.position += dir * overlap;
-              final sepSpeed =
-                  b.velocity.dx * dir.dx + b.velocity.dy * dir.dy;
-              if (sepSpeed < 0) {
-                b.velocity -= dir * sepSpeed * 0.9;
-              }
-            } else if (lockedB) {
-              a.position -= dir * overlap;
-              final sepSpeed =
-                  a.velocity.dx * dir.dx + a.velocity.dy * dir.dy;
-              if (sepSpeed > 0) {
-                a.velocity -= dir * sepSpeed * 0.9;
-              }
-            } else {
-              a.position -= dir * (overlap / 2);
-              b.position += dir * (overlap / 2);
-
-              final relVel = b.velocity - a.velocity;
-              final sepSpeed = relVel.dx * dir.dx + relVel.dy * dir.dy;
-              if (sepSpeed < 0) {
-                final impulse = dir * sepSpeed * 0.9;
-                a.velocity += impulse;
-                b.velocity -= impulse;
-              }
-            }
-          }
-          continue;
+    final hullPolys = List<List<Offset>?>.filled(count, null);
+    final polyCache = List<List<Offset>?>.filled(count, null);
+    if (hullFor != null) {
+      for (var i = 0; i < count; i++) {
+        final hull = hullFor(ids[i]);
+        if (hull != null && hull.length >= 3) {
+          final poly = copyProvidedHulls
+              ? List<Offset>.from(hull, growable: false)
+              : hull;
+          hullPolys[i] = poly;
+          polyCache[i] = poly;
         }
+      }
+    }
 
-        final polyA =
-            hullA ?? _circleHull(a.position, rA, sides: 12);
-        final polyB =
-            hullB ?? _circleHull(b.position, rB, sides: 12);
+    void translatePoly(int idx, Offset delta) {
+      final poly = polyCache[idx];
+      if (poly == null) return;
+      for (var k = 0; k < poly.length; k++) {
+        poly[k] = poly[k] + delta;
+      }
+    }
 
-        final sat = _sat(polyA, polyB);
-        if (sat == null) continue;
+    List<Offset> polyFor(int idx) {
+      final existing = polyCache[idx];
+      if (existing != null) return existing;
+      final poly = _circleHull(
+        particleList[idx].position,
+        radii[idx],
+        sides: satCircleHullSides,
+      );
+      polyCache[idx] = poly;
+      return poly;
+    }
 
-        final dir = sat.normal;
-        final overlap = sat.depth;
+    void processPair(int i, int j) {
+      final a = particleList[i];
+      final b = particleList[j];
+      final rA = radii[i];
+      final rB = radii[j];
+      final minDist = rA + rB;
+      final minDist2 = minDist * minDist;
 
-        if (lockedA && lockedB) {
-          continue;
-        } else if (lockedA) {
-          b.position += dir * overlap;
+      final lockedA = locked[i];
+      final lockedB = locked[j];
+      if (lockedA && lockedB) return;
+
+      var delta = b.position - a.position;
+      var dist2 = delta.dx * delta.dx + delta.dy * delta.dy;
+      if (dist2 < samePos2) {
+        delta = Offset(_rng.nextDouble() - 0.5, _rng.nextDouble() - 0.5);
+        dist2 = delta.dx * delta.dx + delta.dy * delta.dy;
+      }
+      if (dist2 >= minDist2) return;
+
+      final dist = sqrt(dist2);
+      final dir = delta / dist;
+
+      if (hullPolys[i] == null && hullPolys[j] == null) {
+        final overlap = minDist - dist;
+
+        if (lockedA) {
+          final move = dir * overlap;
+          b.position += move;
+          translatePoly(j, move);
+
           final sepSpeed = b.velocity.dx * dir.dx + b.velocity.dy * dir.dy;
           if (sepSpeed < 0) {
-            b.velocity -= dir * sepSpeed * 0.9;
+            b.velocity -= dir * sepSpeed * collisionImpulse;
           }
         } else if (lockedB) {
-          a.position -= dir * overlap;
+          final move = dir * overlap;
+          a.position -= move;
+          translatePoly(i, -move);
+
           final sepSpeed = a.velocity.dx * dir.dx + a.velocity.dy * dir.dy;
           if (sepSpeed > 0) {
-            a.velocity -= dir * sepSpeed * 0.9;
+            a.velocity -= dir * sepSpeed * collisionImpulse;
           }
         } else {
-          a.position -= dir * (overlap / 2);
-          b.position += dir * (overlap / 2);
+          final move = dir * (overlap / 2);
+          a.position -= move;
+          b.position += move;
+          translatePoly(i, -move);
+          translatePoly(j, move);
 
           final relVel = b.velocity - a.velocity;
           final sepSpeed = relVel.dx * dir.dx + relVel.dy * dir.dy;
           if (sepSpeed < 0) {
-            final impulse = dir * sepSpeed * 0.9;
+            final impulse = dir * sepSpeed * collisionImpulse;
             a.velocity += impulse;
             b.velocity -= impulse;
+          }
+        }
+        return;
+      }
+
+      final polyA = polyFor(i);
+      final polyB = polyFor(j);
+      final sat = _sat(polyA, polyB);
+      if (sat == null) return;
+
+      final nrm = sat.normal;
+      final overlap = sat.depth;
+
+      if (lockedA) {
+        final move = nrm * overlap;
+        b.position += move;
+        translatePoly(j, move);
+
+        final sepSpeed = b.velocity.dx * nrm.dx + b.velocity.dy * nrm.dy;
+        if (sepSpeed < 0) {
+          b.velocity -= nrm * sepSpeed * collisionImpulse;
+        }
+      } else if (lockedB) {
+        final move = nrm * overlap;
+        a.position -= move;
+        translatePoly(i, -move);
+
+        final sepSpeed = a.velocity.dx * nrm.dx + a.velocity.dy * nrm.dy;
+        if (sepSpeed > 0) {
+          a.velocity -= nrm * sepSpeed * collisionImpulse;
+        }
+      } else {
+        final move = nrm * (overlap / 2);
+        a.position -= move;
+        b.position += move;
+        translatePoly(i, -move);
+        translatePoly(j, move);
+
+        final relVel = b.velocity - a.velocity;
+        final sepSpeed = relVel.dx * nrm.dx + relVel.dy * nrm.dy;
+        if (sepSpeed < 0) {
+          final impulse = nrm * sepSpeed * collisionImpulse;
+          a.velocity += impulse;
+          b.velocity -= impulse;
+        }
+      }
+    }
+
+    final useSpatialHash = enableSpatialHash && count > spatialHashThreshold;
+    if (!useSpatialHash) {
+      for (var i = 0; i < count; i++) {
+        for (var j = i + 1; j < count; j++) {
+          processPair(i, j);
+        }
+      }
+      return;
+    }
+
+    final cellSize = max(
+      spatialHashMinCellSize,
+      maxRadius * spatialHashCellSizeMultiplier,
+    );
+    final invCellSize = 1.0 / cellSize;
+    final grid = <CellKey, List<int>>{};
+
+    for (var i = 0; i < count; i++) {
+      final pos = particleList[i].position;
+      final cx = (pos.dx * invCellSize).floor();
+      final cy = (pos.dy * invCellSize).floor();
+      final key = packCellKey(cx, cy);
+      grid.putIfAbsent(key, () => <int>[]).add(i);
+    }
+
+    final neighborRange = max(1, ((maxRadius * 2) / cellSize).ceil());
+
+    for (final entry in grid.entries) {
+      final key = entry.key;
+      final cell = entry.value;
+
+      for (var a = 0; a < cell.length; a++) {
+        for (var b = a + 1; b < cell.length; b++) {
+          processPair(cell[a], cell[b]);
+        }
+      }
+
+      final x = unpackCellX(key);
+      final y = unpackCellY(key);
+
+      for (var dx = 0; dx <= neighborRange; dx++) {
+        final dyStart = dx == 0 ? 1 : -neighborRange;
+        for (var dy = dyStart; dy <= neighborRange; dy++) {
+          final neighborKey = packCellKey(x + dx, y + dy);
+          final other = grid[neighborKey];
+          if (other == null) continue;
+
+          for (final i in cell) {
+            for (final j in other) {
+              processPair(i, j);
+            }
           }
         }
       }
@@ -237,8 +376,7 @@ _SatResult? _sat(List<Offset> a, List<Offset> b) {
 
       final projA = _project(a, unit);
       final projB = _project(b, unit);
-      final overlap =
-          min(projA.$2, projB.$2) - max(projA.$1, projB.$1);
+      final overlap = min(projA.$2, projB.$2) - max(projA.$1, projB.$1);
       if (overlap <= 0) {
         return false;
       }

@@ -18,7 +18,14 @@ void main() {
         home: SizedBox(
           width: 240,
           height: 240,
-          child: MagneticView(controller: controller),
+          child: MagneticView(
+            controller: controller,
+            physics: MagneticPhysics(enableSpatialHash: false),
+            tuning: const MagneticViewTuning(
+              adaptiveLabelSearchIterations: 8,
+              pathHullSamplesPerLength: 10,
+            ),
+          ),
         ),
       ),
     );

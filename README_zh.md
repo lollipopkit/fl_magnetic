@@ -17,17 +17,15 @@
 
 ## 快速开始
 
-```yaml
-dependencies:
-  magnetic:
-    path: ../magnetic.dart
+```sh
+dart pub add fl_magnetic
 ```
 
 ## 用法
 
 ```dart
 import 'package:flutter/material.dart';
-import 'package:magnetic/magnetic.dart';
+import 'package:fl_magnetic/fl_magnetic.dart';
 
 class Demo extends StatefulWidget {
   const Demo({super.key});
@@ -75,6 +73,8 @@ class _DemoState extends State<Demo> {
 ## API 概览
 
 - `MagneticView`：容器/场景，负责物理模拟和交互。
+- `MagneticView.physics`：传入自定义 `MagneticPhysics` 以调参。
+- `MagneticView.tuning`：调帧步进/凸包采样/文字自适应等。
 - `MagneticController`：管理节点列表与选中状态（支持动态增删、resetSelection）。
 - `MagneticController.selectedNodes`：按 nodes 顺序返回已选中节点列表。
 - `MagneticNode`：气泡数据模型（text/image/style 等）。
@@ -86,6 +86,39 @@ class _DemoState extends State<Demo> {
   - `textMaxLines/minFontSize` 影响默认文字的多行与自适应缩放。
 - `MagneticView.spacingScale`：全局间距倍率（与每个节点 marginScale 相乘）。
 - `MagneticView.animationBuilder`：选中/取消/移除动画 hook。
+- `MagneticPhysics`：物理参数 + broad-phase 选项。
+- `MagneticViewTuning`：视图/算法调参。
+
+### 物理与调参
+
+所有算法/性能细节都可以通过 `MagneticPhysics` 与 `MagneticViewTuning` 配置。
+
+```dart
+MagneticView(
+  controller: controller,
+  physics: MagneticPhysics(
+    enableSpatialHash: true,
+    spatialHashThreshold: 32,
+    spatialHashCellSizeMultiplier: 2.0,
+    spatialHashMinCellSize: 1.0,
+    satCircleHullSides: 12,
+    samePositionEpsilon: 0.001,
+    centerAttractionEpsilon: 0.001,
+    collisionImpulse: 0.9,
+    copyProvidedHulls: true,
+  ),
+  tuning: const MagneticViewTuning(
+    maxDtSeconds: 0.05,
+    initialVelocityScale: 80,
+    itemDragReleaseVelocityScale: 1.0,
+    backgroundDragReleaseVelocityScale: 0.7,
+    pathHullSamplesPerLength: 20,
+    pathHullMinSamples: 24,
+    pathHullMaxSamples: 160,
+    adaptiveLabelSearchIterations: 14,
+  ),
+)
+```
 
 ### 自定义形状示例
 
