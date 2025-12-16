@@ -9,21 +9,43 @@ import 'magnetic_controller.dart';
 import 'magnetic_node_style.dart';
 import 'physics.dart';
 
-typedef MagneticNodeBuilder = Widget Function(
-  BuildContext context,
-  MagneticNode node,
-  bool selected,
-);
+/// Builder function for creating custom node widgets.
+///
+/// Parameters:
+/// - [context] - The build context
+/// - [node] - The magnetic node to render
+/// - [selected] - Whether the node is currently selected
+typedef MagneticNodeBuilder =
+    Widget Function(BuildContext context, MagneticNode node, bool selected);
 
+/// Configuration for tuning the magnetic view's physics and rendering behavior.
+///
+/// These parameters control various aspects of the simulation and rendering
+/// to fine-tune the user experience. Most users won't need to change these.
 @immutable
 class MagneticViewTuning {
+  /// Maximum time step for physics simulation (seconds).
   final double maxDtSeconds;
+
+  /// Scale factor for initial random velocities when nodes are created.
   final double initialVelocityScale;
+
+  /// Scale factor for velocity when dragging items ends.
   final double itemDragReleaseVelocityScale;
+
+  /// Scale factor for velocity when background dragging ends.
   final double backgroundDragReleaseVelocityScale;
+
+  /// Number of hull samples per unit of path length for custom shapes.
   final double pathHullSamplesPerLength;
+
+  /// Minimum number of hull samples for custom shapes.
   final int pathHullMinSamples;
+
+  /// Maximum number of hull samples for custom shapes.
   final int pathHullMaxSamples;
+
+  /// Number of iterations for adaptive label font size search.
   final int adaptiveLabelSearchIterations;
 
   const MagneticViewTuning({
@@ -35,14 +57,14 @@ class MagneticViewTuning {
     this.pathHullMinSamples = 24,
     this.pathHullMaxSamples = 160,
     this.adaptiveLabelSearchIterations = 14,
-  })  : assert(maxDtSeconds >= 0),
-        assert(initialVelocityScale >= 0),
-        assert(itemDragReleaseVelocityScale >= 0),
-        assert(backgroundDragReleaseVelocityScale >= 0),
-        assert(pathHullSamplesPerLength > 0),
-        assert(pathHullMinSamples >= 3),
-        assert(pathHullMaxSamples >= pathHullMinSamples),
-        assert(adaptiveLabelSearchIterations > 0);
+  }) : assert(maxDtSeconds >= 0),
+       assert(initialVelocityScale >= 0),
+       assert(itemDragReleaseVelocityScale >= 0),
+       assert(backgroundDragReleaseVelocityScale >= 0),
+       assert(pathHullSamplesPerLength > 0),
+       assert(pathHullMinSamples >= 3),
+       assert(pathHullMaxSamples >= pathHullMinSamples),
+       assert(adaptiveLabelSearchIterations > 0);
 }
 
 class _AdaptiveLabel extends StatelessWidget {
@@ -107,20 +129,13 @@ class _AdaptiveLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final fs = _bestFontSize(
-          constraints,
-          Directionality.of(context),
-        );
+        final fs = _bestFontSize(constraints, Directionality.of(context));
         return Text(
           text,
           textAlign: TextAlign.center,
           maxLines: maxLines,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: fs,
-            color: color,
-            fontWeight: fontWeight,
-          ),
+          style: TextStyle(fontSize: fs, color: color, fontWeight: fontWeight),
         );
       },
     );
@@ -145,48 +160,111 @@ Path _fitPathToSize(Path original, Size size) {
   return original.transform(m);
 }
 
-enum MagneticNodeAnimationType {
-  select,
-  deselect,
-  remove,
-}
+/// Types of animations that can be applied to magnetic nodes.
+enum MagneticNodeAnimationType { select, deselect, remove }
 
-typedef MagneticNodeAnimationBuilder = Widget Function(
-  BuildContext context,
-  MagneticNode node,
-  MagneticNodeAnimationType type,
-  bool selected,
-  Animation<double> animation,
-  Widget child,
-);
+/// Builder function for creating custom node animations.
+///
+/// Parameters:
+/// - [context] - The build context
+/// - [node] - The node being animated
+/// - [type] - The type of animation (select, deselect, or remove)
+/// - [selected] - The current selection state of the node
+/// - [animation] - The animation controller
+/// - [child] - The child widget to animate
+typedef MagneticNodeAnimationBuilder =
+    Widget Function(
+      BuildContext context,
+      MagneticNode node,
+      MagneticNodeAnimationType type,
+      bool selected,
+      Animation<double> animation,
+      Widget child,
+    );
 
+/// A widget that displays magnetic, physics-based bubbles.
+///
+/// This widget creates an interactive bubble interface where nodes are
+/// attracted to the center and collide with each other using physics simulation.
+/// Users can tap to select nodes, drag them around, or drag the background
+/// to apply force to all nodes.
+///
+/// Example usage:
+/// ```dart
+/// MagneticView(
+///   controller: _controller,
+///   allowsMultipleSelection: true,
+///   onSelect: (node) => print('Selected: ${node.text}'),
+/// )
+/// ```
 class MagneticView extends StatefulWidget {
+  /// Optional controller for managing nodes and selection state.
+  ///
+  /// If provided, the view will listen to this controller for changes.
+  /// Either [controller] or [nodes] must be provided.
   final MagneticController? controller;
+
+  /// Optional list of nodes to display.
+  ///
+  /// If provided without a [controller], a default controller will be created.
+  /// Either [controller] or [nodes] must be provided.
   final List<MagneticNode>? nodes;
 
+  /// Default style applied to all nodes unless overridden.
   final MagneticNodeStyle defaultStyle;
+
   /// Global spacing multiplier between bubbles.
   ///
   /// Effective collision spacing is `nodeStyle.marginScale * spacingScale`.
   final double spacingScale;
+
+  /// Whether multiple nodes can be selected simultaneously.
   final bool allowsMultipleSelection;
+
+  /// Whether nodes can be dragged around.
   final bool enableItemDrag;
+
+  /// Whether dragging the background applies force to all nodes.
   final bool enableBackgroundDrag;
+
+  /// Whether long-pressing a node removes it with animation.
   final bool enableLongPressToRemove;
+
+  /// Duration of the removal animation.
   final Duration removeAnimationDuration;
+
+  /// Configuration for physics and rendering tuning parameters.
   final MagneticViewTuning tuning;
+
+  /// Optional custom physics simulation.
+  ///
+  /// If not provided, a default [MagneticPhysics] instance is used.
   final MagneticPhysics? physics;
+
+  /// Optional builder for custom node widgets.
+  ///
+  /// If provided, this function is called to render each node.
   final MagneticNodeBuilder? nodeBuilder;
+
   /// Optional hook to provide custom animations for select/deselect/remove.
   ///
   /// When provided, default removal scale animation is disabled and this hook
   /// receives an [Animation<double>] for each transition.
   final MagneticNodeAnimationBuilder? animationBuilder;
 
+  /// Callback when a node is selected.
   final ValueChanged<MagneticNode>? onSelect;
+
+  /// Callback when a node is deselected.
   final ValueChanged<MagneticNode>? onDeselect;
+
+  /// Callback when a node is removed.
   final ValueChanged<MagneticNode>? onRemove;
 
+  /// Creates a new magnetic view.
+  ///
+  /// Either [controller] or [nodes] must be provided. If both are provided,
+  /// the controller takes precedence and the [nodes] parameter is ignored.
   const MagneticView({
     super.key,
     this.controller,
@@ -205,8 +283,10 @@ class MagneticView extends StatefulWidget {
     this.onSelect,
     this.onDeselect,
     this.onRemove,
-  }) : assert(controller != null || nodes != null,
-            'Provide either a controller or nodes.');
+  }) : assert(
+         controller != null || nodes != null,
+         'Provide either a controller or nodes.',
+       );
 
   @override
   State<MagneticView> createState() => _MagneticViewState();
@@ -326,17 +406,19 @@ class _MagneticViewState extends State<MagneticView>
       final newlyDeselected = _lastSelectedIds.difference(current);
 
       for (final id in newlySelected) {
-        final node = _controller.nodes
-            .cast<MagneticNode?>()
-            .firstWhere((n) => n?.id == id, orElse: () => null);
+        final node = _controller.nodes.cast<MagneticNode?>().firstWhere(
+          (n) => n?.id == id,
+          orElse: () => null,
+        );
         if (node != null) {
           _triggerSelectionAnimation(node, MagneticNodeAnimationType.select);
         }
       }
       for (final id in newlyDeselected) {
-        final node = _controller.nodes
-            .cast<MagneticNode?>()
-            .firstWhere((n) => n?.id == id, orElse: () => null);
+        final node = _controller.nodes.cast<MagneticNode?>().firstWhere(
+          (n) => n?.id == id,
+          orElse: () => null,
+        );
         if (node != null) {
           _triggerSelectionAnimation(node, MagneticNodeAnimationType.deselect);
         }
@@ -385,7 +467,8 @@ class _MagneticViewState extends State<MagneticView>
         return MagneticParticle(position: pos, velocity: vel);
       });
 
-      if (node.path != null && node.behavior?.convexHull(node, false, _styleFor(node)) == null) {
+      if (node.path != null &&
+          node.behavior?.convexHull(node, false, _styleFor(node)) == null) {
         final source = node.path;
         if (_hullSources[node.id] != source) {
           final unit = _computeUnitHull(source!);
@@ -458,7 +541,10 @@ class _MagneticViewState extends State<MagneticView>
     for (final metric in fitted.computeMetrics(forceClosed: true)) {
       final count = (metric.length * widget.tuning.pathHullSamplesPerLength)
           .round()
-          .clamp(widget.tuning.pathHullMinSamples, widget.tuning.pathHullMaxSamples)
+          .clamp(
+            widget.tuning.pathHullMinSamples,
+            widget.tuning.pathHullMaxSamples,
+          )
           .toInt();
       for (var i = 0; i < count; i++) {
         final t = metric.length * (i / count);
@@ -469,9 +555,7 @@ class _MagneticViewState extends State<MagneticView>
     if (points.length < 3) return null;
     final hull = _convexHull(points);
     if (hull.length < 3) return null;
-    return hull
-        .map((p) => p - const Offset(0.5, 0.5))
-        .toList(growable: false);
+    return hull.map((p) => p - const Offset(0.5, 0.5)).toList(growable: false);
   }
 
   List<Offset> _convexHull(List<Offset> pts) {
@@ -481,8 +565,7 @@ class _MagneticViewState extends State<MagneticView>
         return c != 0 ? c : a.dy.compareTo(b.dy);
       });
     double cross(Offset o, Offset a, Offset b) {
-      return (a.dx - o.dx) * (b.dy - o.dy) -
-          (a.dy - o.dy) * (b.dx - o.dx);
+      return (a.dx - o.dx) * (b.dy - o.dy) - (a.dy - o.dy) * (b.dx - o.dx);
     }
 
     final lower = <Offset>[];
@@ -528,12 +611,16 @@ class _MagneticViewState extends State<MagneticView>
   double _collisionRadiusFor(MagneticNode node) {
     final selected = _controller.isSelected(node.id);
     final style = _styleFor(node);
-    var radius = style.radius *
+    var radius =
+        style.radius *
         style.marginScale *
         widget.spacingScale *
         _displayScaleFor(node, selected);
-    final mult =
-        node.behavior?.collisionRadiusMultiplier(node, selected, style);
+    final mult = node.behavior?.collisionRadiusMultiplier(
+      node,
+      selected,
+      style,
+    );
     if (mult != null) {
       radius *= mult;
     }
@@ -556,8 +643,13 @@ class _MagneticViewState extends State<MagneticView>
       final d = (localPosition - p.position).distance;
 
       bool inside;
-      final behaviorHit =
-          node.behavior?.hitTest(node, localInBox, size, selected, _styleFor(node));
+      final behaviorHit = node.behavior?.hitTest(
+        node,
+        localInBox,
+        size,
+        selected,
+        _styleFor(node),
+      );
       if (behaviorHit != null) {
         inside = behaviorHit;
       } else if (node.path != null) {
@@ -703,7 +795,8 @@ class _MagneticViewState extends State<MagneticView>
     if (id == null) return;
     final p = _particles[id];
     if (p != null) {
-      var v = details.velocity.pixelsPerSecond *
+      var v =
+          details.velocity.pixelsPerSecond *
           widget.tuning.itemDragReleaseVelocityScale;
       final speed = v.distance;
       if (speed > _physics.maxVelocity) {
@@ -715,7 +808,8 @@ class _MagneticViewState extends State<MagneticView>
   }
 
   void _endBackgroundDrag(DragEndDetails details) {
-    final vRaw = details.velocity.pixelsPerSecond *
+    final vRaw =
+        details.velocity.pixelsPerSecond *
         widget.tuning.backgroundDragReleaseVelocityScale;
     var v = vRaw;
     final speed = v.distance;
@@ -741,7 +835,9 @@ class _MagneticViewState extends State<MagneticView>
         );
         if (nextSize != _size) {
           _size = nextSize;
-          SchedulerBinding.instance.addPostFrameCallback((_) => _syncParticles());
+          SchedulerBinding.instance.addPostFrameCallback(
+            (_) => _syncParticles(),
+          );
         }
 
         return GestureDetector(
@@ -761,8 +857,7 @@ class _MagneticViewState extends State<MagneticView>
           onPanStart: (details) {
             if (!widget.enableItemDrag && !widget.enableBackgroundDrag) return;
             final local = details.localPosition;
-            final node =
-                widget.enableItemDrag ? _hitTest(local) : null;
+            final node = widget.enableItemDrag ? _hitTest(local) : null;
             if (node != null) {
               _startItemDrag(node, local);
               setState(() {});
@@ -775,9 +870,10 @@ class _MagneticViewState extends State<MagneticView>
             final local = details.localPosition;
             final draggingId = _draggingNodeId;
             if (draggingId != null) {
-              final node = _controller.nodes
-                  .cast<MagneticNode?>()
-                  .firstWhere((n) => n?.id == draggingId, orElse: () => null);
+              final node = _controller.nodes.cast<MagneticNode?>().firstWhere(
+                (n) => n?.id == draggingId,
+                orElse: () => null,
+              );
               if (node == null) return;
               final p = _particles[draggingId];
               if (p == null) return;
@@ -816,10 +912,7 @@ class _MagneticViewState extends State<MagneticView>
           },
           child: Stack(
             clipBehavior: Clip.none,
-            children: [
-              for (final node in _controller.nodes)
-                _buildNode(node),
-            ],
+            children: [for (final node in _controller.nodes) _buildNode(node)],
           ),
         );
       },
@@ -840,25 +933,24 @@ class _MagneticViewState extends State<MagneticView>
 
     final baseChild = widget.nodeBuilder != null
         ? widget.nodeBuilder!(context, node, selected)
-        : (node.behavior?.build(
-                context, node, selected, style, anySelected) ??
-            (node.path != null
-                ? _PathBubble(
-                    node: node,
-                    selected: selected,
-                    style: style,
-                    anySelected: anySelected,
-                    labelSearchIterations:
-                        widget.tuning.adaptiveLabelSearchIterations,
-                  )
-                : _DefaultBubble(
-                    node: node,
-                    selected: selected,
-                    style: style,
-                    anySelected: anySelected,
-                    labelSearchIterations:
-                        widget.tuning.adaptiveLabelSearchIterations,
-                  )));
+        : (node.behavior?.build(context, node, selected, style, anySelected) ??
+              (node.path != null
+                  ? _PathBubble(
+                      node: node,
+                      selected: selected,
+                      style: style,
+                      anySelected: anySelected,
+                      labelSearchIterations:
+                          widget.tuning.adaptiveLabelSearchIterations,
+                    )
+                  : _DefaultBubble(
+                      node: node,
+                      selected: selected,
+                      style: style,
+                      anySelected: anySelected,
+                      labelSearchIterations:
+                          widget.tuning.adaptiveLabelSearchIterations,
+                    )));
 
     Widget animatedChild = baseChild;
 
@@ -934,8 +1026,9 @@ class _DefaultBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final bg = selected ? style.selectedColor : style.color;
     final fg = selected ? style.selectedTextColor : style.textColor;
-    final scale =
-        selected ? style.selectedScale : (anySelected ? style.deselectedScale : style.scale);
+    final scale = selected
+        ? style.selectedScale
+        : (anySelected ? style.deselectedScale : style.scale);
 
     return AnimatedScale(
       scale: scale,
@@ -1081,8 +1174,9 @@ class _PathBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final bg = selected ? style.selectedColor : style.color;
     final fg = selected ? style.selectedTextColor : style.textColor;
-    final scale =
-        selected ? style.selectedScale : (anySelected ? style.deselectedScale : style.scale);
+    final scale = selected
+        ? style.selectedScale
+        : (anySelected ? style.deselectedScale : style.scale);
     final path = node.path!;
 
     return AnimatedScale(
@@ -1106,10 +1200,7 @@ class _PathBubble extends StatelessWidget {
               fit: StackFit.expand,
               children: [
                 if (node.image != null)
-                  Image(
-                    image: node.image!,
-                    fit: BoxFit.cover,
-                  ),
+                  Image(image: node.image!, fit: BoxFit.cover),
                 Padding(
                   padding: const EdgeInsets.all(12),
                   child: Center(

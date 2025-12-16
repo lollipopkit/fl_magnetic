@@ -5,11 +5,10 @@ import 'package:fl_magnetic/fl_magnetic.dart';
 
 void main() {
   testWidgets('MagneticView builds with Path nodes', (tester) async {
-    final square = Path()
-      ..addRect(const Rect.fromLTWH(-50, -50, 100, 100));
-    final controller = MagneticController(nodes: [
-      MagneticNode(id: 's', text: 'Square', path: square),
-    ]);
+    final square = Path()..addRect(const Rect.fromLTWH(-50, -50, 100, 100));
+    final controller = MagneticController(
+      nodes: [MagneticNode(id: 's', text: 'Square', path: square)],
+    );
 
     addTearDown(controller.dispose);
 
@@ -34,4 +33,3 @@ void main() {
     expect(find.text('Square'), findsOneWidget);
   });
 }
-

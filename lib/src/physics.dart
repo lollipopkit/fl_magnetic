@@ -4,30 +4,75 @@ import 'package:flutter/widgets.dart';
 
 import 'cell_key.dart';
 
+/// Represents a single particle in the physics simulation.
+///
+/// Each particle has a position and velocity, and corresponds to
+/// a magnetic node in the view.
 class MagneticParticle {
+  /// Current position of the particle.
   Offset position;
+
+  /// Current velocity of the particle.
   Offset velocity;
 
+  /// Creates a new particle with the given position and velocity.
   MagneticParticle({required this.position, required this.velocity});
 }
 
+/// Physics simulation for magnetic nodes.
+///
+/// Handles collision detection, attraction to center, and general
+/// physics behavior for magnetic nodes. Supports both circle-based
+/// and convex hull-based collision detection.
 class MagneticPhysics {
   final Random _rng;
+
+  /// Strength of attraction toward the center of the view.
   final double attractionStrength;
+
+  /// Amount of random motion applied to particles.
   final double randomMotion;
+
+  /// Drag coefficient that slows particles over time.
   final double drag;
+
+  /// Maximum velocity magnitude for particles.
   final double maxVelocity;
+
+  /// Bounce factor when particles hit boundaries (0-1).
   final double bounce;
+
+  /// Whether to enable spatial hashing for performance optimization.
   final bool enableSpatialHash;
+
+  /// Minimum number of particles before spatial hashing is enabled.
   final int spatialHashThreshold;
+
+  /// Multiplier for spatial hash cell size based on particle radius.
   final double spatialHashCellSizeMultiplier;
+
+  /// Minimum size for spatial hash cells.
   final double spatialHashMinCellSize;
+
+  /// Number of sides to use when approximating circles with polygons.
   final int satCircleHullSides;
+
+  /// Minimum distance for particles to be considered at the same position.
   final double samePositionEpsilon;
+
+  /// Minimum distance from center before attraction is applied.
   final double centerAttractionEpsilon;
+
+  /// Impulse factor applied during collisions.
   final double collisionImpulse;
+
+  /// Whether to copy provided hull arrays to avoid mutation.
   final bool copyProvidedHulls;
 
+  /// Creates a new physics simulation with the given parameters.
+  ///
+  /// The default values are carefully chosen to provide natural,
+  /// pleasing motion for most use cases.
   MagneticPhysics({
     Random? rng,
     this.attractionStrength = 50.0,
@@ -53,6 +98,15 @@ class MagneticPhysics {
        assert(collisionImpulse >= 0),
        _rng = rng ?? Random();
 
+  /// Advances the physics simulation by one time step.
+  ///
+  /// Parameters:
+  /// - [particles] - Map of particle IDs to particle states
+  /// - [size] - Size of the containing view
+  /// - [dt] - Time step in seconds
+  /// - [radiusFor] - Function to get collision radius for a particle
+  /// - [hullFor] - Optional function to get convex hull for collision
+  /// - [lockedIds] - Set of particle IDs that shouldn't move
   void step({
     required Map<String, MagneticParticle> particles,
     required Size size,

@@ -28,14 +28,13 @@ Path starPath({
   return path;
 }
 
-Path pillPath({
-  double width = 220,
-  double height = 120,
-}) {
-  final rect =
-      Rect.fromCenter(center: Offset.zero, width: width, height: height);
-  return Path()
-    ..addRRect(RRect.fromRectXY(rect, height / 2, height / 2));
+Path pillPath({double width = 220, double height = 120}) {
+  final rect = Rect.fromCenter(
+    center: Offset.zero,
+    width: width,
+    height: height,
+  );
+  return Path()..addRRect(RRect.fromRectXY(rect, height / 2, height / 2));
 }
 
 class MagneticExampleApp extends StatelessWidget {
@@ -45,10 +44,7 @@ class MagneticExampleApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Magnetic Example',
-      theme: ThemeData(
-        colorSchemeSeed: Colors.blue,
-        useMaterial3: true,
-      ),
+      theme: ThemeData(colorSchemeSeed: Colors.blue, useMaterial3: true),
       home: const MagneticExamplePage(),
     );
   }
@@ -62,34 +58,36 @@ class MagneticExamplePage extends StatefulWidget {
 }
 
 class _MagneticExamplePageState extends State<MagneticExamplePage> {
-  late final MagneticController controller = MagneticController(nodes: [
-    MagneticNode(id: '0', text: 'Rock'),
-    MagneticNode(id: '1', text: 'Jazz'),
-    MagneticNode(id: '2', text: 'Hip Hop / Alternative / Indie'),
-    MagneticNode(id: '3', text: 'Classical'),
-    MagneticNode(id: '4', text: 'Pop'),
-    MagneticNode(id: '5', text: 'EDM'),
-    MagneticNode(
-      id: 'star',
-      text: 'Star',
-      path: starPath(points: 5),
-      style: MagneticNodeStyle(
-        radius: 46,
-        color: Colors.amber.shade100,
-        selectedColor: Colors.amber.shade400,
+  late final MagneticController controller = MagneticController(
+    nodes: [
+      MagneticNode(id: '0', text: 'Rock'),
+      MagneticNode(id: '1', text: 'Jazz'),
+      MagneticNode(id: '2', text: 'Hip Hop / Alternative / Indie'),
+      MagneticNode(id: '3', text: 'Classical'),
+      MagneticNode(id: '4', text: 'Pop'),
+      MagneticNode(id: '5', text: 'EDM'),
+      MagneticNode(
+        id: 'star',
+        text: 'Star',
+        path: starPath(points: 5),
+        style: MagneticNodeStyle(
+          radius: 46,
+          color: Colors.amber.shade100,
+          selectedColor: Colors.amber.shade400,
+        ),
       ),
-    ),
-    MagneticNode(
-      id: 'pill',
-      text: 'Pill',
-      path: pillPath(),
-      style: MagneticNodeStyle(
-        radius: 52,
-        color: Colors.pink.shade50,
-        selectedColor: Colors.pink.shade300,
+      MagneticNode(
+        id: 'pill',
+        text: 'Pill',
+        path: pillPath(),
+        style: MagneticNodeStyle(
+          radius: 52,
+          color: Colors.pink.shade50,
+          selectedColor: Colors.pink.shade300,
+        ),
       ),
-    ),
-  ]);
+    ],
+  );
 
   final Random _rng = Random();
   int _counter = 6;
@@ -103,7 +101,8 @@ class _MagneticExamplePageState extends State<MagneticExamplePage> {
         text: 'New $id',
         style: MagneticNodeStyle(
           color: Colors.grey.shade200,
-          selectedColor: Colors.primaries[_rng.nextInt(Colors.primaries.length)],
+          selectedColor:
+              Colors.primaries[_rng.nextInt(Colors.primaries.length)],
           radius: 36 + _rng.nextDouble() * 14,
         ),
       ),
